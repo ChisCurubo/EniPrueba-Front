@@ -1,0 +1,1643 @@
+foreach (string item in listSubsidiaries)
+
+                        {
+
+                            strSubsidiaryName = string.Empty;
+
+                            List<KeyValuePair<string, string>> listErrors = new List<KeyValuePair<string, string>>();
+
+                            DateTime dtmTimeProcessBegin = DateTime.Now;
+
+                            DateTime dtmTimeProcessEnd = DateTime.Now;
+
+ 
+
+                            string[] arrItem = item.Split(new string[] { " - " }, StringSplitOptions.None);
+
+                            int intSubsidiariaValue = int.Parse(arrItem[0].ToString());
+
+                            strSubsidiaryName = arrItem[1].ToString();
+
+                            strSubsidiary = intSubsidiariaValue.ToString();
+
+ 
+
+                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> The SYNC MONITORING of the Subdidiary, " + strSubsidiary + ", will be processed", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                            using (OracleConnection ConnHQ = new OracleConnection(strOracleBD))
+
+                            {
+
+                                ConnHQ.Open();
+
+                                strSqlQuery = "SELECT S.SID, S.STORE_NAME, S.STORE_NO, S.GLOBAL_STORE_CODE, C.ADDRESS " +
+
+                                    " FROM RPS.CONTROLLER C, RPS.STORE S, RPS.SUBSIDIARY SU " +
+
+                                    " WHERE C.STORE_SID=S.SID AND C.DEFAULT_SBS_SID=SU.SID AND S.SBS_SID=SU.SID " +
+
+                                    " AND S.ACTIVE=1  AND ARCHIVED=0 AND CONTROLLER_TYPE=2 AND GLOBAL_STORE_CODE IS NOT NULL" +
+
+                                    " AND SU.SBS_NO=" + strSubsidiary +
+
+                                    " ORDER BY S.GLOBAL_STORE_CODE";
+
+ 
+
+                                objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY: " + strSqlQuery, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                using (OracleCommand cmdM = new OracleCommand(strSqlQuery, ConnHQ))
+
+                                {
+
+                                    cmdM.CommandType = CommandType.Text;
+
+                                    OracleDataReader dataReader = cmdM.ExecuteReader();
+
+ 
+
+                                    while (dataReader.Read())
+
+                                    {
+
+                                        objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Validating HQ info for Store: " + dataReader["STORE_NAME"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                        InfoSincronizacion objSinc = new InfoSincronizacion();
+
+                                        objSinc.strStoreName = dataReader["STORE_NAME"].ToString();
+
+                                        objSinc.strStoreERPID = dataReader["GLOBAL_STORE_CODE"].ToString();
+
+ 
+
+                                        //PRODUCTOS EN HQ
+
+                                        using (OracleCommand cmdP = new OracleCommand(strSQLProductsHQ + " AND SU.SBS_NO=" + strSubsidiary, ConnHQ))
+
+                                        {
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLProductsHQ: " + strSQLProductsHQ + " AND SU.SBS_NO=" + strSubsidiary, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdP.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderP = cmdP.ExecuteReader();
+
+ 
+
+                                            while (dataReaderP.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intProductsTotalRecordsHQ = Int32.Parse(dataReaderP["TOTALP"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intProductsTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intProductsTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+ 
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //STOCK DISPONIBLE EN HQ
+
+                                        using (OracleCommand cmdSt = new OracleCommand(strSQLStockHQ + " AND SU.SBS_NO=" + strSubsidiary + " AND I.STORE_SID=" + dataReader["SID"].ToString(), ConnHQ))
+
+                                        {
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLStockHQ: " + strSQLStockHQ + " AND SU.SBS_NO=" + strSubsidiary + " AND I.STORE_SID=" + dataReader["SID"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdSt.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderSt = cmdSt.ExecuteReader();
+
+ 
+
+                                            if (dataReaderSt.HasRows)
+
+                                            {
+
+                                                while (dataReaderSt.Read())
+
+                                                {
+
+                                                    try
+
+                                                    {
+
+                                                        objSinc.intStockTotalRecordsHQ = Int32.Parse(dataReaderSt["TOTALST"].ToString());
+
+                                                    }
+
+                                                    catch (Exception)
+
+                                                    {
+
+                                                        objSinc.intStockTotalRecordsHQ = 0;
+
+                                                        objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intStockTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                    }
+
+                                                }
+
+                                            }
+
+                                            else
+
+                                                objLog.Log("timer_MonitoreoSincronizacion_Elapsed -->dataReaderSt Stock Disponible NO HasRows ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                        }
+
+ 
+
+                                        //VOU HQ
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLRecepcionesTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLRecepcionesTotales: " + strSQLRecepcionesTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intVOUTotalRecordsHQ = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intVOUTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intVOUTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+ 
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //Voucher RETURN
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLVouReturnTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLVouReturnTotales: " + strSQLVouReturnTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intVOURETURNTotalRecordsHQ = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intVOURETURNTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intVOURETURNTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //SLIP
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLSlipTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND ST.STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLSlipTotales: " + strSQLSlipTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND ST.STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intSLIPTotalRecordsHQ = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intSLIPTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSLIPTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //ADJ
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLAdjTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLAdjTotales: " + strSQLAdjTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intADJTotalRecordsHQ = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intADJTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intADJTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //SALES TOTAL HQ
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLSalesTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLSalesTotalHQ: " + strSQLSalesTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intSalesTotalRecordsHQ = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intSalesTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSalesTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //RETURN SALES TOTAL HQ
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLReturnSaleTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLReturnSaleTotal: " + strSQLReturnSaleTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intReturnSalesTotalRecordsHQ = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intSalesTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSalesTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //SALES TOTAL HQ ERP
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLSalesTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString() + " AND EXTERNAL_TRANSFER_STATUS IS NOT NULL", ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLSalesTotalHQERP: " + strSQLSalesTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString() + " AND EXTERNAL_TRANSFER_STATUS IS NOT NULL", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intSalesTotalRecordsHQERP = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intSalesTotalRecordsHQERP = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSalesTotalRecordsHQERP", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //RETURN SALES TOTAL HQ ERP
+
+                                        using (OracleCommand cmdS = new OracleCommand(strSQLReturnSaleTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString() + " AND EXTERNAL_TRANSFER_STATUS IS NOT NULL", ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLReturnSaleTotal: " + strSQLReturnSaleTotal + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString() + " AND EXTERNAL_TRANSFER_STATUS IS NOT NULL", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdS.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                            while (dataReaderS.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intReturnSalesTotalRecordsHQERP = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intSalesTotalRecordsHQERP = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSalesTotalRecordsHQERP", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //SALES TODAY
+
+                                        using (OracleCommand cmdSD = new OracleCommand(strSQLSalesDia + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLSalesDiaHQ: " + strSQLSalesDia + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdSD.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderSD = cmdSD.ExecuteReader();
+
+ 
+
+                                            while (dataReaderSD.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intDaySalesTotalRecordsHQ = Int32.Parse(dataReaderSD["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intDaySalesTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intDaySalesTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        //RETUNR SALES TODAY
+
+                                        using (OracleCommand cmdSD = new OracleCommand(strSQLReturnSaleDia + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnHQ))
+
+                                        {
+
+ 
+
+                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLReturnSaleDia: " + strSQLReturnSaleDia + " AND SBS_NO=" + strSubsidiary + " AND STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                            cmdSD.CommandType = CommandType.Text;
+
+                                            OracleDataReader dataReaderSD = cmdSD.ExecuteReader();
+
+ 
+
+                                            while (dataReaderSD.Read())
+
+                                            {
+
+                                                try
+
+                                                {
+
+                                                    objSinc.intDayReturnSalesTotalRecordsHQ = Int32.Parse(dataReaderSD["TOTALS"].ToString());
+
+                                                }
+
+                                                catch (Exception)
+
+                                                {
+
+                                                    objSinc.intDaySalesTotalRecordsHQ = 0;
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intDaySalesTotalRecordsHQ", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                }
+
+                                            }
+
+                                        }
+
+ 
+
+                                        objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Connecting To Store: " + dataReader["STORE_NAME"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                        using (OracleConnection ConnStore = new OracleConnection(strConnectionToSTORE.Replace("IPTIENDA", dataReader["ADDRESS"].ToString())))
+
+                                        {
+
+                                            try
+
+                                            {
+
+                                                ConnStore.Open();
+
+                                                objSinc.strStatusRPConnection = "Connected";
+
+ 
+
+                                                objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Connected To Store: " + dataReader["GLOBAL_STORE_CODE"].ToString() + "-" + dataReader["STORE_NAME"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                                //PRODUCTS
+
+                                                using (OracleCommand cmdP = new OracleCommand(strSQLProducts, ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLProducts: " + strSQLProducts, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                                    cmdP.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderP = cmdP.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderP.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intProductsTotalRecords = Int32.Parse(dataReaderP["TOTALP"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intProductsTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intProductsTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //STOCK DISPONIBLE
+
+                                                using (OracleCommand cmdP = new OracleCommand(strSQLStock + " AND ST.STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLStock: " + strSQLStock + " AND ST.STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                                    cmdP.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderP = cmdP.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderP.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intStockTotalRecords = Int32.Parse(dataReaderP["TOTALST"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intStockTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intStockTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //VOU STORE
+
+                                                using (OracleCommand cmdS = new OracleCommand(strSQLRecepcionesTotales, ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLRecepcionesTotales: " + strSQLRecepcionesTotales, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                                    cmdS.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderS.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intVOUTotalRecords = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intVOUTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intVOUTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //VOU RETURN STORE
+
+                                                using (OracleCommand cmdS = new OracleCommand(strSQLVouReturnTotales, ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLVouReturnTotales: " + strSQLVouReturnTotales, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                                    cmdS.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderS.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intVOURETURNTotalRecords = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+ 
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intVOURETURNTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intVOURETURNTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //SLIP STORE
+
+                                                using (OracleCommand cmdS = new OracleCommand(strSQLSlipTotales, ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLSlipTotales: " + strSQLSlipTotales, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                                    cmdS.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderS.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intSLIPTotalRecords = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intSLIPTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSLIPTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //ADJ STORE
+
+                                                using (OracleCommand cmdS = new OracleCommand(strSQLAdjTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLAdjTotales: " + strSQLAdjTotales + " AND SU.SBS_NO=" + strSubsidiary + " AND S.STORE_NO=" + dataReader["STORE_NO"].ToString(), TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                                    cmdS.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderS.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intADJTotalRecords = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intADJTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intADJTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //SALES TOTAL STORE
+
+                                                using (OracleCommand cmdS = new OracleCommand(strSQLSalesTotal, ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLSalesTotal: " + strSQLSalesTotal, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                                    cmdS.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderS.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intSalesTotalRecords = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intSalesTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSalesTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //RETURN SALES TOTAL STORE
+
+                                                using (OracleCommand cmdS = new OracleCommand(strSQLReturnSaleTotal, ConnStore))
+
+                                                {
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLReturnSaleTotal: " + strSQLReturnSaleTotal, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                                                    cmdS.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderS = cmdS.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderS.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intReturnSalesTotalRecords = Int32.Parse(dataReaderS["TOTALS"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intSalesTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intSalesTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //SALES TODAY STORE
+
+                                                using (OracleCommand cmdSD = new OracleCommand(strSQLSalesDia, ConnStore))
+
+                                                {
+
+ 
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLSalesDia: " + strSQLSalesDia, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                                    cmdSD.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderSD = cmdSD.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderSD.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intDaySalesTotalRecords = Int32.Parse(dataReaderSD["TOTALS"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intDaySalesTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intDaySalesTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+ 
+
+                                                //RETURN SALES TODAY STORE
+
+                                                using (OracleCommand cmdSD = new OracleCommand(strSQLReturnSaleDia, ConnStore))
+
+                                                {
+
+ 
+
+                                                    objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> QUERY strSQLReturnSaleDia: " + strSQLReturnSaleDia, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+ 
+
+                                                    cmdSD.CommandType = CommandType.Text;
+
+                                                    OracleDataReader dataReaderSD = cmdSD.ExecuteReader();
+
+ 
+
+                                                    while (dataReaderSD.Read())
+
+                                                    {
+
+                                                        try
+
+                                                        {
+
+                                                            objSinc.intDayReturnSalesTotalRecords = Int32.Parse(dataReaderSD["TOTALS"].ToString());
+
+                                                        }
+
+                                                        catch (Exception)
+
+                                                        {
+
+                                                            objSinc.intDaySalesTotalRecords = 0;
+
+                                                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Error al hacer IntParse de intDaySalesTotalRecords", TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+                                                        }
+
+                                                    }
+
+                                                }
+
+                                            }
+
+                                            catch (Exception expS)
+
+                                            {
+
+                                                objLog.Log("<< EXCEPTION >> - timer_MonitoreoSincronizacion_Elapsed --> Error Connecting to STORE " + dataReader["STORE_NAME"].ToString() + ":", expS.Message, TLogType.ltError, TLogLevel.logNormal, "MonitorSincronizacion");
+
+                                                objSinc.strStatusRPConnection = "";
+
+                                            }
+
+ 
+
+ 
+
+                                        }
+
+                                        lstEstatusSincronizacion.Add(objSinc);
+
+ 
+
+                                    }
+
+ 
+
+                                }//USING HQ LISTA DE CONTROLERS
+
+                            }
+
+ 
+
+                            objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> Creating Email with info. Amount of Store in List:" + lstEstatusSincronizacion.Count, TLogType.ltInformational, TLogLevel.logDEBUG, "MonitorSincronizacion");
+
+ 
+
+                            string strBody = "<table cellpadding=1 cellspacin=1 border=0 width=1200>";
+
+                            strBody += "<tr><td><font face=verdana size=2>Dear Client: " + strSubsidiaryName + "<br><br>" + "Find below information collected from stores, POA and SAP<br>" + DateTime.Now + "<br><br></font></td></tr>";
+
+                            strBody += "<tr><td><font face=verdana size=2>Subsidiary: <b>" + strSubsidiary + " - " + strSubsidiaryName + "</b></font></td></tr>";
+
+                            strBody += "<tr><td><font face=verdana size=2></b></font></td></tr>";
+
+                            strBody += "<tr><td><table width=100%>";
+
+                            strBody += "<tr>";
+
+                            strBody += "<td bgcolor=#000000 rowspan=2><center><font face=verdana size=2 color=#FFFFFF>Store Name</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 rowspan=2><center><font face=verdana size=2 color=#FFFFFF>Status Connection</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Products Total</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Qty Stock Available</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Vouchers Received</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Vouchers Return</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Slips</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Adjustment Quantity</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=3><center><font face=verdana size=2 color=#FFFFFF>Sales From " + strDateFromMonitoring.Split(' ')[0] + "</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=3><center><font face=verdana size=2 color=#FFFFFF>Return Sales From " + strDateFromMonitoring.Split(' ')[0] + "</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Sales Today</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 colspan=2><center><font face=verdana size=2 color=#FFFFFF>Return Sales Today</font></center></td>";
+
+ 
+
+                            strBody += "</tr>";
+
+                            strBody += "<tr>";
+
+                            strBody += "<td bgcolor=#000000 ><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 ><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 ><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 ><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 ><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000 ><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>SAP</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>SAP</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>Store</font></center></td>";
+
+                            strBody += "<td bgcolor=#000000><center><font face=verdana size=2 color=#FFFFFF>HQ</font></center></td>";
+
+                            strBody += "</tr>";
+
+                            string strBGC_DIFF = string.Empty;
+
+                            foreach (InfoSincronizacion objSync in lstEstatusSincronizacion)
+
+                            {
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<tr><td><center><font face=verdana size=2 color=red>" + objSync.strStoreERPID + "-" + objSync.strStoreName + "</font></center></td>";
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>NOT Connected</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    strBody += "<tr><td><center><font face=verdana size=2>" + objSync.strStoreERPID + "-" + objSync.strStoreName + "</font></center></td>";
+
+                                    strBody += "<td><center><font face=verdana size=2>" + objSync.strStatusRPConnection + "</font></center></td>";
+
+                                }
+
+ 
+
+                                //PRODUCT
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + " ><center><font face=verdana size=2 color=red>" + objSync.intProductsTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intProductsTotalRecords.ToString() != objSync.intProductsTotalRecordsHQ.ToString())
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intProductsTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + " ><center><font face=verdana size=2>" + objSync.intProductsTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+ 
+
+                                //STOCK
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + " ><center><font face=verdana size=2 color=red>" + objSync.intStockTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intStockTotalRecords.ToString() != objSync.intStockTotalRecordsHQ.ToString())
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intStockTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + " ><center><font face=verdana size=2>" + objSync.intStockTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+ 
+
+                                //VOU
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intVOUTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intVOUTotalRecords.ToString() != objSync.intVOUTotalRecordsHQ.ToString())
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intVOUTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intVOUTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+ 
+
+                                //VOU RETURN
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intVOURETURNTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intVOURETURNTotalRecords.ToString() != objSync.intVOURETURNTotalRecordsHQ.ToString())
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intVOURETURNTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intVOURETURNTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+ 
+
+ 
+
+                                //SLIP
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intSLIPTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intSLIPTotalRecords.ToString() != objSync.intSLIPTotalRecordsHQ.ToString())
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intSLIPTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intSLIPTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+ 
+
+ 
+
+                                //ADJUSTMENT
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intADJTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intADJTotalRecords.ToString() != objSync.intADJTotalRecordsHQ.ToString())
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intADJTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intADJTotalRecordsHQ.ToString() + "</font></center></td>";
+
+ 
+
+                                }
+
+ 
+
+ 
+
+                                //SALES TOTAL
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intSalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intSalesTotalRecordsHQERP.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intSalesTotalRecords > objSync.intSalesTotalRecordsHQ)
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intSalesTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intSalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intSalesTotalRecordsHQERP.ToString() + "</font></center></td>";
+
+                                }
+
+ 
+
+ 
+
+                                //RETURN SALES TOTAL
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intReturnSalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intReturnSalesTotalRecordsHQERP.ToString() + "</font></center></td>";
+
+ 
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intReturnSalesTotalRecords > objSync.intReturnSalesTotalRecordsHQ)
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intReturnSalesTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intReturnSalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intReturnSalesTotalRecordsHQERP.ToString() + "</font></center></td>";
+
+ 
+
+                                }
+
+ 
+
+                                //SALES TODAY
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intDaySalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intDaySalesTotalRecords > objSync.intDaySalesTotalRecordsHQ)
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intDaySalesTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intDaySalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+ 
+
+                                }
+
+ 
+
+                                //RETURN SALES TODAY
+
+                                strBGC_DIFF = string.Empty;
+
+                                if (objSync.strStatusRPConnection == "")
+
+                                {
+
+                                    strBody += "<td><center><font face=verdana size=2 color=red>-</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2 color=red>" + objSync.intDayReturnSalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+                                }
+
+                                else
+
+                                {
+
+                                    if (objSync.intDayReturnSalesTotalRecords > objSync.intDayReturnSalesTotalRecordsHQ)
+
+                                        strBGC_DIFF = "bgcolor=yellow";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intDayReturnSalesTotalRecords.ToString() + "</font></center></td>";
+
+                                    strBody += "<td " + strBGC_DIFF + "><center><font face=verdana size=2>" + objSync.intDayReturnSalesTotalRecordsHQ.ToString() + "</font></center></td>";
+
+ 
+
+                                }
+
+ 
+
+                                strBody += "</tr>";
+
+                            }
+
+ 
+
+                            strBody += "</table></td></tr>";
+
+                            strBody += "<tr><td>&nbsp;</td></tr>";
+
+                            strBody += "<tr><td><center><font face=verdana size=2>Thanks</font></center></td></tr>";
+
+                            strBody += "<tr><td><center><font face=verdana size=2><b>Retail Pro - SAP B1 Interface</b></font></center></td></tr></table>";
+
+ 
+
+                            //objLog.Log("timer_MonitoreoSincronizacion_Elapsed --> strBody: ", strBody, TLogType.ltError, TLogLevel.logNormal, "MonitorSincronizacion");
+
+ 
+
+                            SendEmailAttach("LINK SAP B1 Retail Pro SYNC Monitor Sub:" + strSubsidiary + " - " + strSubsidiaryName, strBody, "", false);
+
+                        }
+
+ 

@@ -30,12 +30,12 @@ const Table = ({ columns, data, detail, detaildata }) => {
             {columns.map((column, index) => (
               <th
                 key={index}
-                className="border border-gray-300 px-4 py-2 text-left"
+                className="border border-gray-300 px-4  py-2 text-center"
               >
                 {column}
               </th>
             ))}
-            <th className="border border-gray-300 px-4 py-2 text-left">
+            <th className="border border-gray-300 px-8 py-2 text-center">
               Acción
             </th>
           </tr>
@@ -44,15 +44,15 @@ const Table = ({ columns, data, detail, detaildata }) => {
           {processedData.map((row, rowIndex) => (
             <tr key={rowIndex} className="odd:bg-gray-100 even:bg-white">
               {columns.map((column, colIndex) => (
-                <td key={colIndex} className="border border-gray-300 px-4 py-2">
+                <td key={colIndex} className="border border-gray-300 px-4 py-2 text-center">
                   {row[column] || 'N/A'}
                 </td>
               ))}
-              <td className="border border-gray-300 px-4 py-2">
+              <td className="border border-gray-300 px-0 py-2 text-center" >
                 {/* Mostrar el botón solo si showButton es true */}
                 {row.showButton && (
                   <button
-                    className="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-700"
+                    className="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-700 "
                     onClick={() => handleViewDetails(row)}
                   >
                     Ver Detalles
@@ -74,7 +74,7 @@ const Table = ({ columns, data, detail, detaildata }) => {
                 className="text-red-500 font-bold text-lg"
                 onClick={handleCloseDetails}
               >
-                ×
+                <span className="text-2xl">&times;</span> 
               </button>
             </div>
             <div className="mt-4">
@@ -93,19 +93,17 @@ const Table = ({ columns, data, detail, detaildata }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Mostrar detalles basados en la transacción seleccionada */}
-                  <tr className="odd:bg-gray-100 even:bg-white">
-                    {detaildata.map((column, colIndex) => (
-                      <td
-                        key={colIndex}
-                        className="border border-gray-300 px-4 py-2"
-                      >
-                        {/* Aquí mostramos el valor correspondiente de la transacción */}
-                        {column || 'N/A'}
-                        
-                      </td>
-                    ))}
-                  </tr>
+                  {detaildata.map((column, rowIndex) => (
+                    <tr key={rowIndex} className="border border-gray-300">
+                      {Object.keys(column).map((key) => (
+                        <td key={`${rowIndex}-${key}`} className="border border-gray-300 px-4 py-2">
+                          {/* Display column value or 'N/A' */}
+                          {column[key] || 'N/A'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+
                 </tbody>
               </table>
             </div>

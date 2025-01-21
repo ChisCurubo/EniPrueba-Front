@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import viteLogo from '/vite.svg'
 import Dashboard from './view/Dashboard'
-//import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
 
 function App() {

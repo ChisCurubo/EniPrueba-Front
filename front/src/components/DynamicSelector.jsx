@@ -14,7 +14,7 @@ const DynamicSelector = ({ options, labelTitle }) => {
         id="dynamicSelector"
         value={selectedOption}
         onChange={handleChange}
-        className="border border-gray-300 rounded-lg p-2 w-80"
+        className="border border-gray-300 rounded-lg p-2 w-auto"
       >
         <option value="">Select</option>
         {options.map((option) => (
