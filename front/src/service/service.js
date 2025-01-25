@@ -13,3 +13,20 @@ export const getInfoHQ_end = () => {
       });
 }
 
+export const getInfoDetails_end = (storeName,storeCode, postDate) => {
+    const boby = {
+        storeName: storeName,
+        storeCode: storeCode,
+        postDate: postDate
+      };
+    const reestul = axios.post(apiUrl + `api/getInfoDetails`, boby)
+    console.log(reestul) 
+    return reestul
+        .then(response => {
+            return response;
+        })
+        .catch(error => {
+            return error;
+        });
+  }
+
